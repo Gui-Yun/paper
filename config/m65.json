@@ -1,0 +1,21 @@
+{
+  "LOADER_VERSION": "new",
+  "DATA_PATH": "C:\\Users\\76629\\OneDrive\\brain\\Micedata\\M65_0816",
+  "OLD_VERSION_PATHS": {
+    "neurons": "C:\\Users\\76629\\OneDrive\\brain\\Micedata\\M30_0420\\Neurons.mat",
+    "trials": "C:\\Users\\76629\\OneDrive\\brain\\Micedata\\M30_0420\\Trial_data.mat",
+    "location": "C:\\Users\\76629\\OneDrive\\brain\\Micedata\\M30_0420\\wholebrain_output.mat"
+  },
+  "TRIAL_INFO": {
+    "TRIAL_START_SKIP": 0,
+    "TOTAL_TRIALS": 176
+  },
+  "EXP_INFO": {
+    "t_stimulus": 10,
+    "l_stimulus": 20,
+    "l_trials": 40,
+    "IPD":5.0,
+    "ISI":5.0
+  }
+
+}

@@ -1,0 +1,9 @@
+{
+  "LOADER_VERSION": "new",
+  "DATA_PATH": "C:\\Users\\76629\\OneDrive\\brain\\Micedata\\M74_0816",
+  "TrIAL_INFO": { 
+    "TRIAL_START_SKIP": 1,
+    "TRIAL_END_SKIP": 0,
+    "TOTAL_TRIALS": 180
+  } 
+} 

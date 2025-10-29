@@ -1,0 +1,12 @@
+{
+  "LOADER_VERSION": "old",
+  "DATA_PATH": "C:\\Users\\76629\\OneDrive\\brain\\Micedata\\M30_0420",
+  "OLD_VERSION_PATHS": {
+    "neurons": "C:\\Users\\76629\\OneDrive\\brain\\Micedata\\M30_0420\\Neurons.mat",
+    "trials": "C:\\Users\\76629\\OneDrive\\brain\\Micedata\\M30_0420\\Trial_data.mat",
+    "location": "C:\\Users\\76629\\OneDrive\\brain\\Micedata\\M30_0420\\wholebrain_output.mat"
+  },
+  "TRIAL_START_SKIP": 0,
+  "TRIAL_END_SKIP": 0,
+  "TOTAL_TRIALS": 176
+}
