@@ -11,7 +11,7 @@ def _style_axis(ax):
     ax.xaxis.set_ticks_position("bottom")
     ax.yaxis.set_ticks_position("left")
     ax.tick_params(axis="both", which="major", labelsize=9)
-def _reshape_segments(segments, time_range=None):
+def reshape_segments(segments, time_range=None):
     """Convert segments to shape (neurons, samples) for correlation analysis."""
     segments = np.asarray(segments)
     if segments.ndim != 3:
@@ -42,7 +42,7 @@ def compute_correlation_matrix(segments, labels=None, class_filter=None, time_ra
             raise ValueError(f"No trials found for class filter {class_filter}")
         segments = segments[mask]
 
-    data = _reshape_segments(segments, time_range=time_range)
+    data = reshape_segments(segments, time_range=time_range)
 
     if zscore:
         mean = data.mean(axis=1, keepdims=True)
@@ -229,7 +229,7 @@ def plot_network_metrics_by_class(nx_result, metrics = ["largest_component", "av
         for cls in nx_result.keys():
             value = nx_result[cls]["summary"][metric]
             if std_val > 1e-6:
-                norm_value = (value - min_val) / std_val + 2
+                norm_value = value / mean_val
             else:
                 norm_value = 0.0
             nx_result[cls]["summary"][f"{metric}_norm"] = norm_value
