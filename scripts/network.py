@@ -150,6 +150,37 @@ def compute_network_metrics(graph):
     eigenvector_values = np.array(list(eigenvector.values()))
     return degree_values, clustering_values, eigenvector_values
 
+# =========== 计算每个条件的网络指标 ============
+def compute_network_metrics_by_class(segments, labels):
+    """Compute network metrics for each class."""
+    nx_result = {}
+    for cls in np.unique(labels):
+        corr_matrix, corr_graph, summary = construct_correlation_network(
+            segments,
+            labels=labels,
+            class_filter=cls,
+            time_range=None,
+            zscore=False,
+            threshold=None,
+            top_k=0.05,
+            weighted=False,
+            absolute=False,
+        )
+        # 效率，模块化
+        efficiency = nx.global_efficiency(corr_graph)
+        modularity = nx.algorithms.community.modularity(
+            corr_graph,
+            nx.algorithms.community.greedy_modularity_communities(corr_graph),
+        )   
+        # 保存结果
+        nx_result[cls] = {
+            "corr_matrix": corr_matrix,
+            "corr_graph": corr_graph,
+            "summary": summary,
+            "efficiency": efficiency,
+            "modularity": modularity,
+        }
+    return nx_result
 # %% ========= plotting functions =========
 def plot_correlation_matrix(corr_matrix, title="Correlation Matrix"):
     fig, ax = plt.subplots(figsize=(5.5, 5.0))
@@ -275,33 +306,7 @@ if __name__ == "__main__":
     rich_club_coeffs = nx.rich_club_coefficient(corr_graph, normalized=True)
     plot_rich_club_coefficient(rich_club_coeffs)
     # %% 每个条件的网络指标
-    nx_result = {}
-    for cls in np.unique(labels):
-        corr_matrix, corr_graph, summary = construct_correlation_network(
-            segments,
-            labels=labels,
-            class_filter=cls,
-            time_range=None,
-            zscore=False,
-            threshold=None,
-            top_k=0.05,
-            weighted=False,
-            absolute=False,
-        )
-        # 效率，模块化
-        efficiency = nx.global_efficiency(corr_graph)
-        modularity = nx.algorithms.community.modularity(
-            corr_graph,
-            nx.algorithms.community.greedy_modularity_communities(corr_graph),
-        )   
-        # 保存结果
-        nx_result[cls] = {
-            "corr_matrix": corr_matrix,
-            "corr_graph": corr_graph,
-            "summary": summary,
-            "efficiency": efficiency,
-            "modularity": modularity,
-        }
+    nx_result = compute_network_metrics_by_class(segments, labels)
     plot_network_metrics_by_class(nx_result)
 
 # %%
