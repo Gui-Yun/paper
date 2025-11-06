@@ -4,9 +4,11 @@ import h5py
 import os
 import numpy as np
 import scipy.io
+from scipy import stats
 import pandas as pd
 import matplotlib
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 # %% 定义配置
 class ExpConfig:
@@ -43,6 +45,10 @@ class ExpConfig:
         
         # 赋值配置
         self.data_path = config_data.get("DATA_PATH")
+        self.data_path = self.data_path.replace(
+            "C:\\Users\\76629", 
+            os.environ.get('USERPROFILE')
+        )
         self.trial_info = config_data.get("TRIAL_INFO", {})
         self.exp_info = config_data.get("EXP_INFO")
 
@@ -51,6 +57,10 @@ class ExpConfig:
         # 设置默认配置
         # 数据路径
         self.data_path = "C:\\Users\\76629\\OneDrive\\brain\\Micedata\\M65_0816"
+        self.data_path = self.data_path.replace(
+            "C:\\Users\\76629", 
+            os.environ.get('USERPROFILE')
+        )
         # 试次信息
         self.trial_info = {
             "TRIAL_START_SKIP": 0,
@@ -66,7 +76,7 @@ class ExpConfig:
         }
 
 
-cfg = ExpConfig("..\config\m91.json")
+cfg = ExpConfig("..\config\\m71.json")
 
 # %% 预处理相关函数定义(通用)
 # 从matlab改过来的，经过检查应该无误
@@ -126,8 +136,9 @@ def process_trigger(txt_file, IPD=cfg.exp_info["IPD"], ISI=cfg.exp_info["ISI"], 
     
     # 相机帧与刺激起始时间
     cam_t_raw = t[ch == 1]
+    print(len(cam_t_raw))
     sti_t_raw = t[ch == 2]
-    
+    print(len(sti_t_raw))
     if len(cam_t_raw) == 0:
         raise ValueError("未检测到相机触发(值=1)")
     if len(sti_t_raw) == 0:
@@ -447,56 +458,106 @@ def reclassify(stimulus_data):
         else:
             new_labels.append(0)  # 其他类别
     return np.array(new_labels)
+# ===
+# === 计算相邻元素的差值 ===
+def adjacent_differences(lst):
+    # 处理空列表或只有一个元素的情况
+    if len(lst) < 2:
+        return []
+    
+    differences = []
+    # 遍历列表，计算相邻元素的差值
+    for i in range(1, len(lst)):
+        diff = lst[i] - lst[i-1]
+        differences.append(diff)
+    
+    return differences
 # %% 可视化相关函数定义
-def RR_distribution_plot(neuron_pos, neuron_pos_rr, cfg=cfg):
-    '''
-    RR神经元空间分布可视化
-    '''
-    # 可视化，绘制神经元位置分布
-    # 读取tif文件
+def _rr_distribution_plot(neuron_pos, neuron_pos_rr, cfg=cfg):
+    """RR neuron distribution plot"""
     from tifffile import imread
-    plt.figure(figsize=(8, 6))
-    brain_img = imread(cfg.data_path +  "/whole_brain_3d.tif")
-    plt.imshow(brain_img[brain_img.shape[0]//2, :,:]*1000, cmap='gray')
 
-    plt.scatter(neuron_pos[1, :], neuron_pos[0, :], c='green', s=10, alpha=0.2, marker='o')
-    plt.scatter(neuron_pos_rr[1, :], neuron_pos_rr[0, :], c='yellow', marker='o', s=20, alpha=0.4, label='RR Neurons')
-    plt.title('RR Neuron Spatial Distribution')
-    # plt.grid(True)  
+    fig, ax = plt.subplots(figsize=(8.0, 6.2))
+    brain_img = imread(cfg.data_path + "/whole_brain_3d.tif")
+    mid_slice = brain_img[brain_img.shape[0] // 2, :, :].astype(float)
+    mid_slice = mid_slice / np.nanmax(mid_slice)
+    ax.imshow(mid_slice, cmap="Greys", alpha=0.35)
+
+    sns.scatterplot(
+        x=neuron_pos[1, :],
+        y=neuron_pos[0, :],
+        s=18,
+        color="#9fb3c8",
+        alpha=0.35,
+        edgecolor="none",
+        ax=ax,
+        label="All neurons",
+    )
+    sns.scatterplot(
+        x=neuron_pos_rr[1, :],
+        y=neuron_pos_rr[0, :],
+        s=32,
+        color="#F67280",
+        edgecolor="white",
+        linewidth=0.5,
+        ax=ax,
+        label="RR neurons",
+    )
+
+    ax.set_title('RR neuron spatial distribution', fontsize=13)
+    ax.set_xlabel('X (pixels)', fontsize=11)
+    ax.set_ylabel('Y (pixels)', fontsize=11)
+    ax.legend(frameon=False, fontsize=9, loc='upper right')
+    ax.set_aspect('equal')
+    sns.despine(ax=ax)
+    fig.tight_layout()
     plt.show()
+    return True
 # =================可视化RR神经元响应=====================
-def plot_rr_responses(segments, labels, n=20, cfg=cfg):
-    # 随机选择部分RR神经元进行响应可视化
-    n_samples = min(n, segments.shape[1])  # 最多展示20
+def _plot_rr_responses(segments, labels, n=20, cfg=cfg):
+    """RR neuron response plot"""
+    n_samples = min(n, segments.shape[1])
+    if n_samples == 0:
+        return False
     sample_indices = np.random.choice(segments.shape[1], size=n_samples, replace=False)
     time_axis = np.arange(segments.shape[2])
-    # 每个trial绘制半透明浅色线，用深色实线绘制平均响应
-    plt.figure(figsize=(15, 10))
-    for i, neuron_idx in enumerate(sample_indices):
-        plt.subplot(5, 4, i+1)
-        for trial_idx in range(segments.shape[0]):
-            if labels[trial_idx] == 1:
-                plt.plot(time_axis, segments[trial_idx, neuron_idx, :], color='lightblue', alpha=0.06)
-            if labels[trial_idx] == 2:
-                plt.plot(time_axis, segments[trial_idx, neuron_idx, :], color='lightgreen', alpha=0.06)
-            if labels[trial_idx] == 0:
-                plt.plot(time_axis, segments[trial_idx, neuron_idx, :], color='orange', alpha=0.06)
-        mean_response_1 = np.mean(segments[labels == 1, neuron_idx, :], axis=0) 
-        plt.plot(time_axis, mean_response_1, color='blue', linewidth=2)
+    class_ids = sorted(np.unique(labels))
+    palette = sns.color_palette('tab10', n_colors=len(class_ids))
+    color_map = {cls: palette[i] for i, cls in enumerate(class_ids)}
 
-        mean_response_2 = np.mean(segments[labels == 2, neuron_idx, :], axis=0)
-        plt.plot(time_axis, mean_response_2, color='green', linewidth=2)
+    n_cols = 4
+    n_rows = int(np.ceil(n_samples / n_cols))
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4.0 * n_cols, 2.6 * n_rows), sharex=True, sharey=True)
+    axes = np.atleast_1d(axes).ravel()
 
-        mean_response_3 = np.mean(segments[labels == 0, neuron_idx, :], axis=0)
-        plt.plot(time_axis, mean_response_3, color='red', linewidth=2,alpha=0.8)
-        plt.ylim(-0.1, 1.0)
-        plt.title(f'Neuron {neuron_idx} Response')
-        plt.xlabel('Time (frames)')
-        plt.ylabel('dF/F')
-        plt.axvline(x=cfg.exp_info["t_stimulus"], color='red', linestyle='--')  # 刺激开始线
-        plt.grid(True)
-    plt.tight_layout()
+    for ax, neuron_idx in zip(axes, sample_indices):
+        for cls in class_ids:
+            traces = segments[labels == cls, neuron_idx, :]
+            if traces.size == 0:
+                continue
+            mean_trace = np.mean(traces, axis=0)
+            sem_trace = stats.sem(traces, axis=0, nan_policy='omit')
+            ax.fill_between(time_axis, mean_trace - sem_trace, mean_trace + sem_trace, color=color_map[cls], alpha=0.18)
+            ax.plot(time_axis, mean_trace, color=color_map[cls], linewidth=1.6, label=f'Class {int(cls)}')
+        ax.axvline(x=cfg.exp_info["t_stimulus"], color="#aa3a3a", linestyle="--", linewidth=1.0)
+        ax.set_title(f'Neuron {neuron_idx}', fontsize=10)
+        ax.set_ylim(-0.3, 1.3)
+
+    for ax in axes[len(sample_indices):]:
+        ax.axis('off')
+
+    handles, labels_legend = axes[0].get_legend_handles_labels()
+    if handles:
+        fig.legend(handles, labels_legend, frameon=False, loc='upper center', ncol=len(handles))
+    for ax in axes[:len(sample_indices)]:
+        sns.despine(ax=ax)
+        ax.tick_params(labelsize=8)
+
+    fig.text(0.5, 0.02, 'Time (frames)', ha='center', fontsize=11)
+    fig.text(0.02, 0.5, 'dF/F', va='center', rotation='vertical', fontsize=11)
+    fig.tight_layout(rect=[0.02, 0.04, 0.98, 0.95])
     plt.show()
+    return True
 # %% =============  主程序逻辑 =============================
 if __name__ == "__main__":
     print("开始运行主程序")
@@ -505,6 +566,7 @@ if __name__ == "__main__":
 
     segments, labels, neuron_pos_rr = preprocess_data(neuron_data, neuron_pos, start_edges, stimulus_data)
     # %% 可视化RR神经元分布
-    RR_distribution_plot(neuron_pos, neuron_pos_rr)
+    _rr_distribution_plot(neuron_pos, neuron_pos_rr)
     # %% 可视化RR神经元响应
-    plot_rr_responses(segments, labels, n=20)
+    _plot_rr_responses(segments, labels, n=20)
+
