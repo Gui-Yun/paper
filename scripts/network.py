@@ -4,6 +4,11 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 import matplotlib.pyplot as plt
+import seaborn as sns
+from matplotlib.colors import Normalize
+from scipy import stats
+
+sns.set_theme(context="paper", style="whitegrid")
 # %% ========= helpers =========
 def _style_axis(ax):
     for spine in ["top", "right"]:
@@ -183,101 +188,190 @@ def compute_network_metrics_by_class(segments, labels):
     return nx_result
 # %% ========= plotting functions =========
 def plot_correlation_matrix(corr_matrix, title="Correlation Matrix"):
-    fig, ax = plt.subplots(figsize=(5.5, 5.0))
-    im = ax.imshow(corr_matrix, cmap="bwr", vmin=-1, vmax=1)
-    ax.set_title(title, fontsize=12)
-    ax.set_xlabel("Neuron index")
-    ax.set_ylabel("Neuron index")
-    plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label="r")
+    # corr_matrix = np.asarray(corr_matrix, dtype=float)
+    fig, ax = plt.subplots(figsize=(6.2, 5.6))
+    sns.heatmap(
+        corr_matrix,
+        cmap=sns.diverging_palette(220, 20, as_cmap=True),
+        vmin=-1.0,
+        vmax=1.0,
+        ax=ax,
+    )
+    ax.set_title(title, fontsize=13)
+    # ax.set_xlabel("Neuron index", fontsize=11)
+    ax.set_ylabel("Neuron index", fontsize=11)
+    sns.despine(ax=ax)
+    fig.tight_layout()
     plt.show()
     return True
 # ============ 绘制网络图 ============
 def plot_correlation_graph(graph, neuron_pos=None, title="Correlation Network"):
-    # 结合neuron位置绘制网络图
+    if neuron_pos is None:
+        raise ValueError("neuron_pos is required for plotting the spatial layout")
     assert neuron_pos.shape[1] == graph.number_of_nodes(), "neuron_pos shape does not match graph nodes"
-    pos_dict = {i: (neuron_pos[0, i], neuron_pos[1, i]) for i in range(neuron_pos.shape[1])}
-    plt.figure(figsize=(6, 6))
-    nx.draw_networkx(
+
+    pos_dict = {i: (float(neuron_pos[0, i]), float(neuron_pos[1, i])) for i in range(neuron_pos.shape[1])}
+    degrees = np.array([deg for _, deg in graph.degree()], dtype=float)
+    degree_norm = (degrees - degrees.min()) / (degrees.max() - degrees.min() + 1e-6)
+
+    cmap = sns.color_palette("rocket_r", as_cmap=True)
+    fig, ax = plt.subplots(figsize=(6.4, 6.0))
+
+    edge_weights = np.array([abs(graph[u][v].get("weight", 1.0)) for u, v in graph.edges()], dtype=float)
+    if edge_weights.size:
+        edge_norm = edge_weights / (edge_weights.max() + 1e-6)
+        nx.draw_networkx_edges(
+            graph,
+            pos=pos_dict,
+            ax=ax,
+            edge_color="#b0b8c5",
+            width=0.4 + 2.6 * edge_norm,
+            alpha=0.25 + 0.6 * edge_norm,
+        )
+    else:
+        nx.draw_networkx_edges(
+            graph,
+            pos=pos_dict,
+            ax=ax,
+            edge_color="#b0b8c5",
+            width=0.8,
+            alpha=0.25,
+        )
+
+    node_sizes = 60 + 220 * degree_norm
+    nx.draw_networkx_nodes(
         graph,
         pos=pos_dict,
-        node_size=20,
-        node_color="blue",
-        edge_color="gray",
-        with_labels=False,
-        alpha=0.7,
+        ax=ax,
+        node_size=node_sizes,
+        node_color=degree_norm,
+        cmap=cmap,
+        linewidths=0.6,
+        edgecolors="#f8f8f8",
     )
-    plt.title("Overall Correlation Network")
-    plt.axis("off")
+
+    ax.set_title(title, fontsize=13)
+    ax.axis("off")
+
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=Normalize(vmin=degrees.min(), vmax=degrees.max()))
+    sm.set_array([])
+    cbar = plt.colorbar(sm, ax=ax, fraction=0.045, pad=0.02)
+    cbar.set_label("Node degree", fontsize=10)
+    cbar.ax.tick_params(labelsize=8)
+
+    fig.tight_layout()
     plt.show()
 
 # ============ 分布图绘制 ============
 def plot_network_metric_distributions(degree_values, clustering_values, eigenvector_values):
-    # 绘制度分布图
-    fig, ax = plt.subplots(figsize=(6, 4))
-    ax.hist(degree_values, bins=30, color="skyblue", edgecolor="black")
-    ax.set_title("Degree Distribution")
-    ax.set_xlabel("Degree")
-    ax.set_ylabel("Count")
-    _style_axis(ax)
+    metric_data = [
+        ("Degree", np.asarray(degree_values, dtype=float)),
+        ("Clustering coefficient", np.asarray(clustering_values, dtype=float)),
+        ("Eigenvector centrality", np.asarray(eigenvector_values, dtype=float)),
+    ]
+
+    fig, axes = plt.subplots(1, len(metric_data), figsize=(12.5, 4.2))
+    axes = np.atleast_1d(axes)
+    palette = sns.color_palette("crest", n_colors=len(metric_data))
+
+    for (name, values), color, ax in zip(metric_data, palette, axes):
+        values = values[~np.isnan(values)]
+        if values.size == 0:
+            continue
+        bins = min(30, max(int(values.size / 4), 8))
+        sns.histplot(values, bins=bins, stat="density", color=color, alpha=0.28, edgecolor="none", ax=ax)
+        sns.kdeplot(values, fill=True, color=color, linewidth=1.8, alpha=0.6, ax=ax)
+        ax.axvline(np.median(values), color=color, linestyle="--", linewidth=1.2, label="Median")
+        ax.set_title(f"{name} distribution", fontsize=12)
+        ax.set_xlabel(name, fontsize=10)
+        ax.set_ylabel("Density", fontsize=10)
+        _style_axis(ax)
+        ax.legend(frameon=False, fontsize=8, loc="upper right")
+
+    fig.tight_layout()
     plt.show()
-    # 绘制聚类中心性分布图
-    fig, ax = plt.subplots(figsize=(6, 4))
-    ax.hist(clustering_values, bins=30, color="lightgreen", edgecolor="black")
-    ax.set_title("Clustering Coefficient Distribution")
-    ax.set_xlabel("Clustering Coefficient")
-    ax.set_ylabel("Count")
-    _style_axis(ax)
-    plt.show()
-    # 绘制特征向量中心性分布图
-    fig, ax = plt.subplots(figsize=(6, 4))
-    ax.hist(eigenvector_values, bins=30, color="salmon", edgecolor="black")
-    ax.set_title("Eigenvector Centrality Distribution")
-    ax.set_xlabel("Eigenvector Centrality")
-    ax.set_ylabel("Count")
-    _style_axis(ax)
-    plt.show()
+    return True
 # =========== 富人俱乐部 ============
 def plot_rich_club_coefficient(rich_club_coeffs):
-    # 可视化富人俱乐部系数
-    degrees = sorted(rich_club_coeffs.keys())
-    coeffs = [rich_club_coeffs[d] for d in degrees]
-    plt.figure(figsize=(6, 4))
-    plt.plot(degrees, coeffs, marker="o", linestyle="-")
-    plt.title(f"Rich-Club Coefficient")
-    plt.xlabel("Degree")
-    plt.ylabel("Rich-Club Coefficient")
-    plt.grid()
+    degrees = np.array(sorted(rich_club_coeffs.keys()), dtype=float)
+    coeffs = np.array([rich_club_coeffs[d] for d in degrees], dtype=float)
+
+    fig, ax = plt.subplots(figsize=(6.2, 4.4))
+    sns.lineplot(x=degrees, y=coeffs, ax=ax, color="#355C7D", marker="o", linewidth=2.1)
+    ax.fill_between(degrees, coeffs, color="#355C7D", alpha=0.18)
+
+    slope, intercept, r_value, p_value, _ = stats.linregress(degrees, coeffs)
+    ax.text(
+        0.02,
+        0.92,
+        f"Pearson r = {r_value:.2f}\np = {p_value:.3g}",
+        transform=ax.transAxes,
+        fontsize=9,
+        color="#333333",
+        verticalalignment="top",
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="#f6f6f6", edgecolor="#d8d8d8"),
+    )
+
+    ax.set_xlabel("Degree", fontsize=11)
+    ax.set_ylabel("Rich-club coefficient", fontsize=11)
+    ax.set_title("Rich-Club Coefficient Profile", fontsize=13)
+    sns.despine(ax=ax)
+    fig.tight_layout()
     plt.show()
     return True
 # ========== 可视化对比图 ===========
-def plot_network_metrics_by_class(nx_result, metrics = ["largest_component", "avg_clustering", "global_efficiency", "transitivity"]):
-    # 由于每个指标的值域不一致，需要归一化处理
+def plot_network_metrics_by_class(nx_result, metrics=None):
+    if metrics is None:
+        metrics = ["largest_component", "avg_clustering", "global_efficiency", "transitivity"]
+
+    records = []
     for metric in metrics:
-        all_values = [nx_result[cls]["summary"][metric] for cls in nx_result.keys()]
-        mean_val = np.mean(all_values)
-        min_val = np.min(all_values)
-        std_val = np.std(all_values)
+        values = np.array([nx_result[cls]["summary"][metric] for cls in nx_result.keys()], dtype=float)
+        mean_val = values.mean() if values.size else 0.0
         for cls in nx_result.keys():
             value = nx_result[cls]["summary"][metric]
-            if std_val > 1e-6:
-                norm_value = value / mean_val
-            else:
-                norm_value = 0.0
-            nx_result[cls]["summary"][f"{metric}_norm"] = norm_value
-    fig, ax = plt.subplots(figsize=(10, 6))
-    x = np.arange(len(metrics))
-    width = 0.2
-    for i, cls in enumerate(sorted(nx_result.keys())):
-        values = [nx_result[cls]["summary"][f"{metric}_norm"] for metric in metrics]
-        ax.bar(x + i * width, values, width=width, label=f"Class {cls}")
-    ax.set_xticks(x + width * (len(nx_result) - 1) / 2)
-    ax.set_xticklabels(metrics, rotation=45, ha="right")    
-    ax.set_ylabel("Value")
-    ax.set_title("Network Metrics by Class")
-    ax.legend()
-    plt.tight_layout()
+            norm_value = value / mean_val if mean_val else 0.0
+            records.append({"Class": cls, "Metric": metric, "Normalized": norm_value})
+
+    data = pd.DataFrame(records)
+    fig, ax = plt.subplots(figsize=(8.8, 4.8))
+    sns.pointplot(
+        data=data,
+        x="Metric",
+        y="Normalized",
+        hue="Class",
+        dodge=0.25,
+        markers="o",
+        linestyles="-",
+        palette="deep",
+        ax=ax,
+    )
+
+    ax.axhline(1.0, color="#8a8a8a", linestyle="--", linewidth=1.0, label="Global mean")
+    ax.set_ylabel("Normalized value", fontsize=11)
+    ax.set_xlabel("Metric", fontsize=11)
+    ax.set_title("Network metrics by class (normalized)", fontsize=13)
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=30, ha="right")
+    ax.legend(frameon=False, fontsize=9, loc="best")
+    sns.despine(ax=ax)
+
+    spreads = data.groupby("Metric")["Normalized"].agg(["max", "min"])
+    if not spreads.empty:
+        span_metric = (spreads["max"] - spreads["min"]).idxmax()
+        span_value = (spreads["max"] - spreads["min"]).max()
+        ax.text(
+            0.02,
+            0.05,
+            f"Largest spread: {span_metric} ?={span_value:.2f}",
+            transform=ax.transAxes,
+            fontsize=9,
+            color="#333333",
+            bbox=dict(boxstyle="round,pad=0.3", facecolor="#f4f4f4", edgecolor="#d8d8d8"),
+        )
+
+    fig.tight_layout()
     plt.show()
-    return  True
+    return True
 # %% ========= main analysis =========
 if __name__ == "__main__":
     print("==== network analysis ====")
